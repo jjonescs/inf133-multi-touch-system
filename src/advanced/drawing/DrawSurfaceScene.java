@@ -1,8 +1,11 @@
 package advanced.drawing;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.TreeSet;
 
-import org.mt4j.MTApplication;
+import org.mt4j.AbstractMTApplication;
 import org.mt4j.components.TransformSpace;
 import org.mt4j.components.visibleComponents.shapes.AbstractShape;
 import org.mt4j.input.IMTInputEventListener;
@@ -20,25 +23,24 @@ import processing.core.PApplet;
 
 public class DrawSurfaceScene extends AbstractScene {
 
-	private MTApplication mtApp;
-
+	private AbstractMTApplication mtApp;
 	private AbstractShape drawShape;
-
 	private float stepDistance;
-
 	private Vector3D localBrushCenter;
-
 	private float brushWidthHalf;
-
 	private HashMap<InputCursor, Vector3D> cursorToLastDrawnPoint;
-
 	private float brushHeightHalf;
-
-	private float brushScale;
-	
-	private MTColor brushColor;
-	
+	private float brushScale;	
+	private MTColor brushColor;	
 	private boolean dynamicBrush;
+	
+	//Contains the cursor ids of all existing cursors
+	//Used to calculate the number of objects on the touchpad
+	//private HashSet<Long> liveObjectIds;
+	
+	private HashMap<Long, Integer> cursorColor;	
+	private TreeSet<Integer> colorOrder;
+	private List<MTColor> colorList;	
 	
 	//TODO only works as lightweight scene atm because the framebuffer isnt cleared each frame
 	//TODO make it work as a heavywight scene
@@ -46,7 +48,7 @@ public class DrawSurfaceScene extends AbstractScene {
 	//TODO eraser?
 	//TODO get blobwidth from win7 touch events and adjust the brush scale
 	
-	public DrawSurfaceScene(MTApplication mtApplication, String name) {
+	public DrawSurfaceScene(AbstractMTApplication mtApplication, String name) {
 		super(mtApplication, name);
 		this.mtApp = mtApplication;
 		
@@ -67,17 +69,58 @@ public class DrawSurfaceScene extends AbstractScene {
 		
 		this.cursorToLastDrawnPoint = new HashMap<InputCursor, Vector3D>();
 		
+		//this.liveObjectIds = new HashSet<Long>();
+		
+		this.cursorColor = new HashMap<Long, Integer>();
+		
+		this.colorOrder = new TreeSet<Integer>();
+		colorOrder.add(0);
+		colorOrder.add(1);
+		colorOrder.add(2);
+		colorOrder.add(3);
+		colorOrder.add(4);
+		colorOrder.add(5);
+		colorOrder.add(6);
+		colorOrder.add(7);
+		colorOrder.add(8);
+		colorOrder.add(9);
+		
+		this.colorList = new ArrayList<MTColor>();
+		colorList.add(new MTColor(26, 188, 156));
+		colorList.add(new MTColor(46, 204, 113));
+		colorList.add(new MTColor(52, 152, 219));
+		colorList.add(new MTColor(155, 89, 182));
+		colorList.add(new MTColor(241, 196, 15));
+		colorList.add(new MTColor(230, 126, 34));
+		colorList.add(new MTColor(231, 76, 60));
+		colorList.add(new MTColor(192, 57, 43));
+		colorList.add(new MTColor(52, 73, 94));
+		colorList.add(new MTColor(127, 140, 141));
+
+		
 		this.getCanvas().addInputListener(new IMTInputEventListener() {
 			public boolean processInputEvent(MTInputEvent inEvt){
 				if(inEvt instanceof AbstractCursorInputEvt){
 					final AbstractCursorInputEvt posEvt = (AbstractCursorInputEvt)inEvt;
 					final InputCursor m = posEvt.getCursor();
+
 //					System.out.println("PrevPos: " + prevPos);
 //					System.out.println("Pos: " + pos);
 
 					if (posEvt.getId() != AbstractCursorInputEvt.INPUT_ENDED){
 						registerPreDrawAction(new IPreDrawAction() {
 							public void processAction() {
+								//Add the unique cursor id to the list of existing cursors
+								//Because it's a set, the cursor won't be added twice
+								//liveObjectIds.add(m.getId());
+								
+								if (!cursorColor.containsKey(m.getId())) {
+									cursorColor.put(m.getId(), colorOrder.first());
+									colorOrder.remove(colorOrder.first());
+								}
+
+								setBrushColor(colorList.get(cursorColor.get(m.getId())));					
+								
 								boolean firstPoint = false;
 								Vector3D lastDrawnPoint = cursorToLastDrawnPoint.get(m);
 								Vector3D pos = new Vector3D(posEvt.getX(), posEvt.getY(), 0);
@@ -157,17 +200,26 @@ public class DrawSurfaceScene extends AbstractScene {
 								return false;
 							}
 						});
-					}else{
+					} else{
+						//If the event id is INPUT_ENDED, remove the cursor id from the set of existing objects
+						//liveObjectIds.remove(m.getId());	
+						
+						colorOrder.add(cursorColor.get(m.getId()));
+						cursorColor.remove(m.getId());
+
 						cursorToLastDrawnPoint.remove(m);
 					}
+					
+					//Compute the brush color from the number of existing objects
+					//Red, Blue and Green are all equal, so the resulting color is always grayscale					
+					//setBrushColor(new MTColor(liveObjectIds.size()*25,liveObjectIds.size()*25,liveObjectIds.size()*25));					
 				}
 				return false;
 			}
 		});
 
 	}
-	
-	
+
 	public void setBrush(AbstractShape brush){
 		this.drawShape = brush;
 		this.localBrushCenter = drawShape.getCenterPointLocal();
